@@ -85,28 +85,6 @@ body {
   padding: 18px;
   margin-bottom: 20px;
 }
-.card-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  gap: 10px;
-}
-.card-title-row .card-title { margin-bottom: 0; }
-.export-btns { display: flex; gap: 8px; flex: 0 0 auto; }
-.export-btn {
-  background: var(--surface-2);
-  border: 1px solid var(--hairline);
-  color: var(--chalk);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  padding: 5px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.export-btn:active { border-color: var(--blue); }
-
 .card-title {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 18px;

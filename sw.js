@@ -1,5 +1,5 @@
-const CACHE_NAME = "iron-log-v2";
-const LOCAL_ASSETS = [
+const CACHE_NAME = "iron-log-v1";
+const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
@@ -8,21 +8,10 @@ const LOCAL_ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];
-const CDN_ASSETS = [
-  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
-];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      await cache.addAll(LOCAL_ASSETS);
-      // Best-effort: don't fail install if the CDN is unreachable yet.
-      await Promise.all(
-        CDN_ASSETS.map((url) =>
-          cache.add(url).catch((err) => console.warn("CDN asset not cached yet:", url, err))
-        )
-      );
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
   self.skipWaiting();
 });
