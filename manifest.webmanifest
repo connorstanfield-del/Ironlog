@@ -1,0 +1,17 @@
+{
+  "name": "Iron Log – Powerlifting Tracker",
+  "short_name": "Iron Log",
+  "description": "Track exercises, weight, reps, sets, and RPE. See PRs and progress at a glance.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#15151A",
+  "theme_color": "#15151A",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
