@@ -169,6 +169,41 @@ function getChartData(exercise) {
     .map(([date, e1rm]) => ({ date: fmtDateShort(date), e1rm }));
 }
 
+// ---------- export ----------
+function buildExportRows() {
+  const sorted = [...entries].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return sorted.map((e) => {
+    const w = round1(toDisplay(e.weightKg, unit));
+    const vol = round1(w * e.reps * e.sets);
+    const e1rm = round1(epley(w, e.reps));
+    return [e.date, e.exercise, w, unit, e.reps, e.sets, e.rpe == null ? "" : e.rpe, vol, e1rm];
+  });
+}
+const EXPORT_HEADER = ["Date", "Exercise", "Weight", "Unit", "Reps", "Sets", "RPE", "Volume", "Est. 1RM"];
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function csvField(v) {
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportCSV() {
+  const rows = buildExportRows();
+  const lines = [EXPORT_HEADER, ...rows].map((line) => line.map(csvField).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + lines], { type: "text/csv;charset=utf-8;" });
+  downloadBlob(blob, `iron-log-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
 // ---------- render ----------
 function render() {
   const app = document.getElementById("app");
@@ -253,7 +288,13 @@ function render() {
     </div>
 
     <div class="card">
-      <div class="card-title">History</div>
+      <div class="card-title-row">
+        <div class="card-title">History</div>
+        ${entries.length > 0 ? `
+          <div class="export-btns">
+            <button class="export-btn" id="export-csv">⬇ CSV</button>
+          </div>` : ""}
+      </div>
       ${sorted.length === 0 ? `<div class="empty-state">No sets logged yet. Add your first one above.</div>` : `
         <div>
           ${sorted.map((e) => `
@@ -373,6 +414,9 @@ function attachListeners() {
       render();
     });
   }
+
+  const csvBtn = document.getElementById("export-csv");
+  if (csvBtn) csvBtn.addEventListener("click", exportCSV);
 }
 
 // ---------- install prompt + service worker ----------

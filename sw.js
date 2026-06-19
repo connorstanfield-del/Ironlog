@@ -1,5 +1,5 @@
-const CACHE_NAME = "iron-log-v1";
-const ASSETS = [
+const CACHE_NAME = "iron-log-v3";
+const LOCAL_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
@@ -11,7 +11,7 @@ const ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(LOCAL_ASSETS))
   );
   self.skipWaiting();
 });
