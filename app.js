@@ -33,7 +33,8 @@ let deferredInstallPrompt = null;
 let pendingQueue = [];           // sets staged but not yet logged
 let editingId = null;            // id of a saved entry currently being edited
 let editDraft = null;            // form values while editing a saved entry
-let lastFormValues = { exercise: "Squat", date: null, reps: "", sets: "3", rpe: "8" };
+let lastFormValues = { exercise: "Squat", weight: null, reps: "", sets: "3", rpe: "8" }; // weight stored in kg; persisted across reloads
+let lastFormDate = null;         // NOT persisted — always falls back to today on a fresh load
 let prefillWeight = null;        // one-shot weight value when re-editing a staged set
 
 // ---------- pure helpers ----------
@@ -80,6 +81,10 @@ function loadState() {
   try { entries = JSON.parse(localStorage.getItem("pl-entries") || "[]"); } catch { entries = []; }
   try { unit = (JSON.parse(localStorage.getItem("pl-settings") || "{}").unit) || "kg"; } catch { unit = "kg"; }
   try { pendingQueue = JSON.parse(localStorage.getItem("pl-pending") || "[]"); } catch { pendingQueue = []; }
+  try {
+    const d = JSON.parse(localStorage.getItem("pl-draft") || "null");
+    if (d) lastFormValues = { ...lastFormValues, ...d };
+  } catch { /* keep defaults */ }
 }
 function saveEntries() {
   try { localStorage.setItem("pl-entries", JSON.stringify(entries)); } catch (e) { console.error("save failed", e); }
@@ -89,6 +94,9 @@ function saveSettings() {
 }
 function savePending() {
   try { localStorage.setItem("pl-pending", JSON.stringify(pendingQueue)); } catch (e) { console.error("save failed", e); }
+}
+function saveDraft() {
+  try { localStorage.setItem("pl-draft", JSON.stringify(lastFormValues)); } catch (e) { console.error("save failed", e); }
 }
 
 // ---------- barbell HTML ----------
@@ -254,12 +262,13 @@ function startEditPending(id) {
   pendingQueue = pendingQueue.filter((x) => x.id !== id);
   savePending();
   lastFormValues = {
+    ...lastFormValues,
     exercise: item.exercise,
-    date: item.date,
     reps: String(item.reps),
     sets: String(item.sets),
     rpe: item.rpe == null ? "" : String(item.rpe),
   };
+  lastFormDate = item.date;
   prefillWeight = round1(toDisplay(item.weightKg, unit));
   render();
   document.getElementById("log-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -300,8 +309,8 @@ function render() {
   const today = new Date().toISOString().slice(0, 10);
   const draft = editingId ? editDraft : null;
   const fExercise = draft ? draft.exercise : lastFormValues.exercise;
-  const fDate = draft ? draft.date : (lastFormValues.date || today);
-  const fWeight = draft ? draft.weight : (prefillWeight != null ? prefillWeight : "");
+  const fDate = draft ? draft.date : (lastFormDate || today);
+  const fWeight = draft ? draft.weight : (prefillWeight != null ? prefillWeight : (lastFormValues.weight != null ? round1(toDisplay(lastFormValues.weight, unit)) : ""));
   const fReps = draft ? draft.reps : lastFormValues.reps;
   const fSets = draft ? draft.sets : lastFormValues.sets;
   const fRpe = draft ? (draft.rpe ?? "") : lastFormValues.rpe;
@@ -513,7 +522,9 @@ function attachListeners() {
     } else {
       entries = [{ id: uid(), date: v.date, exercise: v.exercise, weightKg: toKg(v.w, unit), reps: v.reps, sets: v.sets, rpe: v.rpe }, ...entries];
       saveEntries();
-      lastFormValues = { exercise: v.exercise, date: v.date, reps: String(v.reps), sets: String(v.sets), rpe: v.rpe == null ? "" : String(v.rpe) };
+      lastFormValues = { exercise: v.exercise, weight: toKg(v.w, unit), reps: String(v.reps), sets: String(v.sets), rpe: v.rpe == null ? "" : String(v.rpe) };
+      lastFormDate = v.date;
+      saveDraft();
     }
     render();
   });
@@ -525,7 +536,9 @@ function attachListeners() {
       if (!v) return;
       pendingQueue = [...pendingQueue, { id: uid(), date: v.date, exercise: v.exercise, weightKg: toKg(v.w, unit), reps: v.reps, sets: v.sets, rpe: v.rpe }];
       savePending();
-      lastFormValues = { exercise: v.exercise, date: v.date, reps: String(v.reps), sets: String(v.sets), rpe: v.rpe == null ? "" : String(v.rpe) };
+      lastFormValues = { exercise: v.exercise, weight: toKg(v.w, unit), reps: String(v.reps), sets: String(v.sets), rpe: v.rpe == null ? "" : String(v.rpe) };
+      lastFormDate = v.date;
+      saveDraft();
       render();
     });
   }
