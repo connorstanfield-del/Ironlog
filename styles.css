@@ -178,6 +178,33 @@ input::placeholder { color: var(--iron-dim); }
 .rpe-chip { font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 5px; color: #15151A; flex: 0 0 auto; }
 .del-btn { background: none; border: none; color: var(--iron-dim); cursor: pointer; padding: 4px; flex: 0 0 auto; }
 .del-btn:active { color: var(--red); }
+.edit-btn { background: none; border: none; color: var(--iron-dim); cursor: pointer; padding: 4px; flex: 0 0 auto; font-size: 14px; }
+.edit-btn:active { color: var(--blue); }
+
+.form-actions { display: flex; gap: 10px; margin-top: 14px; }
+.form-actions .submit-btn, .form-actions .secondary-btn { flex: 1; margin-top: 0; }
+.secondary-btn {
+  background: transparent;
+  color: var(--blue);
+  border: 1px solid var(--blue);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 17px;
+  letter-spacing: 1px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.secondary-btn:active { background: rgba(45, 111, 158, 0.15); }
+
+.pending-row { border-left: 3px solid var(--blue); padding-left: 8px; }
+
+.batch-footer { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+.batch-footer .submit-btn { margin-top: 0; }
+.batch-footer .clear-link { margin-top: 0; text-align: center; }
 
 .empty-state { text-align: center; padding: 30px 10px; color: var(--iron); font-size: 14px; }
 

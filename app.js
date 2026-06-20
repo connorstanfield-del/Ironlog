@@ -30,6 +30,11 @@ let entries = [];
 let unit = "kg";
 let chartExercise = null;
 let deferredInstallPrompt = null;
+let pendingQueue = [];           // sets staged but not yet logged
+let editingId = null;            // id of a saved entry currently being edited
+let editDraft = null;            // form values while editing a saved entry
+let lastFormValues = { exercise: "Squat", date: null, reps: "", sets: "3", rpe: "8" };
+let prefillWeight = null;        // one-shot weight value when re-editing a staged set
 
 // ---------- pure helpers ----------
 function toDisplay(weightKg, u) { return u === "kg" ? weightKg : weightKg * KG_TO_LB; }
@@ -74,12 +79,16 @@ function rpeColor(rpe) {
 function loadState() {
   try { entries = JSON.parse(localStorage.getItem("pl-entries") || "[]"); } catch { entries = []; }
   try { unit = (JSON.parse(localStorage.getItem("pl-settings") || "{}").unit) || "kg"; } catch { unit = "kg"; }
+  try { pendingQueue = JSON.parse(localStorage.getItem("pl-pending") || "[]"); } catch { pendingQueue = []; }
 }
 function saveEntries() {
   try { localStorage.setItem("pl-entries", JSON.stringify(entries)); } catch (e) { console.error("save failed", e); }
 }
 function saveSettings() {
   try { localStorage.setItem("pl-settings", JSON.stringify({ unit })); } catch (e) { console.error("save failed", e); }
+}
+function savePending() {
+  try { localStorage.setItem("pl-pending", JSON.stringify(pendingQueue)); } catch (e) { console.error("save failed", e); }
 }
 
 // ---------- barbell HTML ----------
@@ -204,6 +213,81 @@ function exportCSV() {
   downloadBlob(blob, `iron-log-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
+// ---------- form helpers & actions ----------
+function readFormValues() {
+  const exercise = document.getElementById("f-exercise").value.trim();
+  const date = document.getElementById("f-date").value;
+  const w = parseFloat(document.getElementById("f-weight").value);
+  const reps = parseInt(document.getElementById("f-reps").value, 10);
+  const sets = parseInt(document.getElementById("f-sets").value, 10);
+  const rpeVal = document.getElementById("f-rpe").value;
+  const rpe = rpeVal === "" ? null : parseFloat(rpeVal);
+  if (!exercise || !date || !w || w <= 0 || !reps || reps <= 0 || !sets || sets <= 0) return null;
+  return { exercise, date, w, reps, sets, rpe };
+}
+
+function startEditEntry(id) {
+  const e = entries.find((x) => x.id === id);
+  if (!e) return;
+  editingId = id;
+  editDraft = {
+    date: e.date,
+    exercise: e.exercise,
+    weight: round1(toDisplay(e.weightKg, unit)),
+    reps: e.reps,
+    sets: e.sets,
+    rpe: e.rpe,
+  };
+  render();
+  document.getElementById("log-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cancelEdit() {
+  editingId = null;
+  editDraft = null;
+  render();
+}
+
+function startEditPending(id) {
+  const item = pendingQueue.find((x) => x.id === id);
+  if (!item) return;
+  pendingQueue = pendingQueue.filter((x) => x.id !== id);
+  savePending();
+  lastFormValues = {
+    exercise: item.exercise,
+    date: item.date,
+    reps: String(item.reps),
+    sets: String(item.sets),
+    rpe: item.rpe == null ? "" : String(item.rpe),
+  };
+  prefillWeight = round1(toDisplay(item.weightKg, unit));
+  render();
+  document.getElementById("log-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function removePending(id) {
+  pendingQueue = pendingQueue.filter((x) => x.id !== id);
+  savePending();
+  render();
+}
+
+function clearQueue() {
+  if (pendingQueue.length === 0) return;
+  if (!window.confirm("Discard all staged sets? They haven't been logged yet.")) return;
+  pendingQueue = [];
+  savePending();
+  render();
+}
+
+function logAllPending() {
+  if (pendingQueue.length === 0) return;
+  entries = [...pendingQueue, ...entries];
+  pendingQueue = [];
+  saveEntries();
+  savePending();
+  render();
+}
+
 // ---------- render ----------
 function render() {
   const app = document.getElementById("app");
@@ -214,6 +298,14 @@ function render() {
     chartExercise = exerciseNames.includes("Squat") ? "Squat" : (exerciseNames[0] || null);
   }
   const today = new Date().toISOString().slice(0, 10);
+  const draft = editingId ? editDraft : null;
+  const fExercise = draft ? draft.exercise : lastFormValues.exercise;
+  const fDate = draft ? draft.date : (lastFormValues.date || today);
+  const fWeight = draft ? draft.weight : (prefillWeight != null ? prefillWeight : "");
+  const fReps = draft ? draft.reps : lastFormValues.reps;
+  const fSets = draft ? draft.sets : lastFormValues.sets;
+  const fRpe = draft ? (draft.rpe ?? "") : lastFormValues.rpe;
+  prefillWeight = null; // one-shot
 
   app.innerHTML = `
     <div class="ptk-header">
@@ -240,41 +332,75 @@ function render() {
       </div>` : ""}
 
     <div class="card">
-      <div class="card-title">Log a Set</div>
+      <div class="card-title">${draft ? "Edit Set" : "Log a Set"}</div>
       <form id="log-form">
         <div class="form-grid">
           <div class="full">
             <label>Exercise</label>
-            <input list="exercise-options" id="f-exercise" placeholder="Squat" required value="Squat">
+            <input list="exercise-options" id="f-exercise" placeholder="Squat" required value="${escapeHtml(fExercise)}">
             <datalist id="exercise-options">
               ${EXERCISES.map((ex) => `<option value="${escapeHtml(ex)}"></option>`).join("")}
             </datalist>
           </div>
           <div>
             <label>Date</label>
-            <input type="date" id="f-date" required value="${today}">
+            <input type="date" id="f-date" required value="${fDate}">
           </div>
           <div>
             <label>Weight (${unit})</label>
-            <input type="number" inputmode="decimal" step="0.5" min="0" id="f-weight" placeholder="100" required>
+            <input type="number" inputmode="decimal" step="0.5" min="0" id="f-weight" placeholder="100" required value="${fWeight}">
           </div>
           <div>
             <label>Reps</label>
-            <input type="number" inputmode="numeric" min="1" id="f-reps" placeholder="5" required>
+            <input type="number" inputmode="numeric" min="1" id="f-reps" placeholder="5" required value="${fReps}">
           </div>
           <div>
             <label>Sets</label>
-            <input type="number" inputmode="numeric" min="1" id="f-sets" value="3" required>
+            <input type="number" inputmode="numeric" min="1" id="f-sets" value="${fSets}" required>
           </div>
           <div class="full">
             <label>RPE</label>
-            <input type="number" inputmode="decimal" step="0.5" min="1" max="10" id="f-rpe" value="8" placeholder="8">
+            <input type="number" inputmode="decimal" step="0.5" min="1" max="10" id="f-rpe" value="${fRpe}" placeholder="8">
           </div>
         </div>
         <div id="barbell-preview"></div>
-        <button type="submit" class="submit-btn">➕ Log Set</button>
+        ${draft ? `
+          <div class="form-actions">
+            <button type="submit" class="submit-btn">💾 Save Changes</button>
+            <button type="button" class="secondary-btn" id="cancel-edit-btn">Cancel</button>
+          </div>
+        ` : `
+          <div class="form-actions">
+            <button type="submit" class="submit-btn">➕ Log Set</button>
+            <button type="button" class="secondary-btn" id="stage-btn">📋 Stage Set</button>
+          </div>
+          <div class="barbell-caption" style="margin-top:8px;">Logging several different sets at once? Tap "Stage Set" for each one, then log them all together below.</div>
+        `}
       </form>
     </div>
+
+    ${pendingQueue.length > 0 ? `
+      <div class="card">
+        <div class="card-title">Staged Sets (${pendingQueue.length})</div>
+        <div>
+          ${pendingQueue.map((item) => `
+            <div class="history-row pending-row">
+              <div class="history-date">${fmtDate(item.date)}</div>
+              <div class="history-main">
+                <div class="history-ex">${escapeHtml(item.exercise)}</div>
+                <div class="history-detail">${round1(toDisplay(item.weightKg, unit))}${unit} · ${item.sets}×${item.reps}</div>
+              </div>
+              ${item.rpe != null ? `<div class="rpe-chip" style="background:${rpeColor(item.rpe)}">RPE ${item.rpe}</div>` : ""}
+              <button class="edit-btn pending-edit-btn" data-id="${item.id}" aria-label="Edit staged set">✏️</button>
+              <button class="del-btn pending-del-btn" data-id="${item.id}" aria-label="Remove staged set">✕</button>
+            </div>`).join("")}
+        </div>
+        <div class="batch-footer">
+          <button class="clear-link" id="clear-queue-btn">Discard staged sets</button>
+          <button class="submit-btn" id="log-all-btn">✅ Log All Staged Sets (${pendingQueue.length})</button>
+        </div>
+      </div>
+    ` : ""}
 
     <div class="card">
       <div class="card-title">📈 Progress</div>
@@ -305,6 +431,7 @@ function render() {
                 <div class="history-detail">${round1(toDisplay(e.weightKg, unit))}${unit} · ${e.sets}×${e.reps}</div>
               </div>
               ${e.rpe != null ? `<div class="rpe-chip" style="background:${rpeColor(e.rpe)}">RPE ${e.rpe}</div>` : ""}
+              <button class="edit-btn" data-id="${e.id}" aria-label="Edit set">✏️</button>
               <button class="del-btn" data-id="${e.id}" aria-label="Delete set">🗑</button>
             </div>`).join("")}
         </div>`}
@@ -371,20 +498,40 @@ function attachListeners() {
 
   document.getElementById("log-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    const exercise = document.getElementById("f-exercise").value.trim();
-    const date = document.getElementById("f-date").value;
-    const w = parseFloat(document.getElementById("f-weight").value);
-    const reps = parseInt(document.getElementById("f-reps").value, 10);
-    const sets = parseInt(document.getElementById("f-sets").value, 10);
-    const rpeVal = document.getElementById("f-rpe").value;
-    const rpe = rpeVal === "" ? null : parseFloat(rpeVal);
+    const v = readFormValues();
+    if (!v) return;
 
-    if (!exercise || !date || !w || w <= 0 || !reps || reps <= 0 || !sets || sets <= 0) return;
-
-    entries = [{ id: uid(), date, exercise, weightKg: toKg(w, unit), reps, sets, rpe }, ...entries];
-    saveEntries();
+    if (editingId) {
+      entries = entries.map((e) =>
+        e.id === editingId
+          ? { ...e, date: v.date, exercise: v.exercise, weightKg: toKg(v.w, unit), reps: v.reps, sets: v.sets, rpe: v.rpe }
+          : e
+      );
+      saveEntries();
+      editingId = null;
+      editDraft = null;
+    } else {
+      entries = [{ id: uid(), date: v.date, exercise: v.exercise, weightKg: toKg(v.w, unit), reps: v.reps, sets: v.sets, rpe: v.rpe }, ...entries];
+      saveEntries();
+      lastFormValues = { exercise: v.exercise, date: v.date, reps: String(v.reps), sets: String(v.sets), rpe: v.rpe == null ? "" : String(v.rpe) };
+    }
     render();
   });
+
+  const stageBtn = document.getElementById("stage-btn");
+  if (stageBtn) {
+    stageBtn.addEventListener("click", () => {
+      const v = readFormValues();
+      if (!v) return;
+      pendingQueue = [...pendingQueue, { id: uid(), date: v.date, exercise: v.exercise, weightKg: toKg(v.w, unit), reps: v.reps, sets: v.sets, rpe: v.rpe }];
+      savePending();
+      lastFormValues = { exercise: v.exercise, date: v.date, reps: String(v.reps), sets: String(v.sets), rpe: v.rpe == null ? "" : String(v.rpe) };
+      render();
+    });
+  }
+
+  const cancelEditBtn = document.getElementById("cancel-edit-btn");
+  if (cancelEditBtn) cancelEditBtn.addEventListener("click", cancelEdit);
 
   const tabs = document.getElementById("chart-tabs");
   if (tabs) {
@@ -397,13 +544,29 @@ function attachListeners() {
     });
   }
 
-  document.querySelectorAll(".del-btn").forEach((btn) => {
+  document.querySelectorAll(".history-row:not(.pending-row) .edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => startEditEntry(btn.dataset.id));
+  });
+
+  document.querySelectorAll(".history-row:not(.pending-row) .del-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       entries = entries.filter((e) => e.id !== btn.dataset.id);
       saveEntries();
       render();
     });
   });
+
+  document.querySelectorAll(".pending-edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => startEditPending(btn.dataset.id));
+  });
+  document.querySelectorAll(".pending-del-btn").forEach((btn) => {
+    btn.addEventListener("click", () => removePending(btn.dataset.id));
+  });
+
+  const clearQueueBtn = document.getElementById("clear-queue-btn");
+  if (clearQueueBtn) clearQueueBtn.addEventListener("click", clearQueue);
+  const logAllBtn = document.getElementById("log-all-btn");
+  if (logAllBtn) logAllBtn.addEventListener("click", logAllPending);
 
   const clearBtn = document.getElementById("clear-all");
   if (clearBtn) {
